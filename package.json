@@ -1,0 +1,47 @@
+{
+  "name": "@platformatic/graphql-subscriptions-resume",
+  "version": "0.0.1-dev",
+  "description": "A library that allows you to resume GraphQL subscriptions",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "lint": "eslint src test benchmarks",
+    "lint:fix": "eslint src test benchmarks --fix",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist;",
+    "check": "pnpm clean && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/platformatic/graphql-subscriptions-resume.git"
+  },
+  "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
+  "dependencies": {
+    "graphql": "^16.10.0",
+    "siphash24": "^1.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "eslint": "^9.21.0",
+    "neostandard": "^0.12.1",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}
