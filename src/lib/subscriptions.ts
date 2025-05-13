@@ -35,8 +35,10 @@ function buildRecoveryQuery (subscription: Subscription): string {
   // If there's an alias, include it in the recovery query
   const aliasPrefix = subscription.alias ? `${subscription.alias}: ` : ''
   
-  // Prepare args for the query, starting with the key
-  const args = [`${subscription.options.key}: ${JSON.stringify(subscription.lastValue)}`]
+  // Prepare args for the query, starting with the key if any
+  const args = subscription.lastValue !== null && subscription.lastValue !== undefined 
+    ? [`${subscription.options.key}: ${JSON.stringify(subscription.lastValue)}`] 
+    : []
   
   // Add any fixed args from options if they exist
   if (subscription.options.args) {
@@ -208,16 +210,14 @@ export class StatefulSubscriptions {
     // Call the recovery subscription for all subscriptions for this client with the lastValue
     for (const subscription of client.subscriptions.values()) {
       this.logger.debug({ subscription }, 'Restoring subscription')
-      // Only restore subscriptions that have a lastValue
-      if (subscription.lastValue !== null) {
-        target.send(JSON.stringify({
-          id: clientId,
-          type: 'start',
-          payload: {
-            query: buildRecoveryQuery(subscription)
-          }
-        }))
-      }
+
+      target.send(JSON.stringify({
+        id: clientId,
+        type: 'start',
+        payload: {
+          query: buildRecoveryQuery(subscription)
+        }
+      }))
     }
   }
 

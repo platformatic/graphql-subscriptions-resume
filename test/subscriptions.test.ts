@@ -900,7 +900,7 @@ test('should handle multiple updates to the same subscription', () => {
   assert.strictEqual(subscription?.lastValue, 20)
 })
 
-test('should restore only subscriptions with lastValue', () => {
+test('should restore only subscriptions without lastValue', () => {
   const state = new StatefulSubscriptions({
     subscriptions: [
       {
@@ -945,15 +945,14 @@ test('should restore only subscriptions with lastValue', () => {
   // Call restoreSubscriptions
   state.restoreSubscriptions('clientId', mockSocket)
 
-  // Should have 2 messages: connection_init and only one recovery subscription
-  assert.equal(mockSocket.messages.length, 2)
+  console.log(mockSocket.messages)
+  assert.equal(mockSocket.messages.length, 3)
   assert.equal(mockSocket.messages[0].type, 'connection_init')
   assert.equal(mockSocket.messages[1].type, 'start')
+  assert.equal(mockSocket.messages[2].type, 'start')
 
-  // Verify only onItems was recovered (since onUsers has no lastValue)
-  const payload = mockSocket.messages[1].payload
-  assert.ok(payload?.query.includes('onItems'))
-  assert.ok(!payload?.query.includes('onUsersRecovery'))
+  assert.ok(mockSocket.messages[1].payload?.query.includes('onItems'))
+  assert.ok(mockSocket.messages[2].payload?.query.includes('onUsers'))
 })
 
 test('should restore multiple subscriptions with lastValues', () => {
