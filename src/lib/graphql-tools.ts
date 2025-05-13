@@ -1,8 +1,14 @@
-import siphash24 from 'siphash24'
 import { parse } from 'graphql'
 import type { OperationDefinitionNode, FieldNode, FragmentDefinitionNode, SelectionSetNode } from 'graphql'
 
-export function extractSubscriptionQueryInfo (query: string) {
+export type SubscriptionInfo = {
+  name: string
+  fields: string[]
+  alias?: string
+  params?: Record<string, any>
+}
+
+export function extractSubscriptionQueryInfo (query: string, variables?: Record<string, any>): SubscriptionInfo | undefined {
   try {
     // Parse the GraphQL query string into an AST
     const document = parse(query)
@@ -14,7 +20,7 @@ export function extractSubscriptionQueryInfo (query: string) {
 
     // If no subscription operation found, return null
     if (!subscriptionOperation) {
-      return null
+      return
     }
 
     // Get the selection set from the subscription operation
@@ -22,10 +28,13 @@ export function extractSubscriptionQueryInfo (query: string) {
 
     // There should be one field at the root level which is the subscription name
     const subscriptionField = selectionSet.selections[0] as FieldNode
+
+    // Handle alias if present, otherwise use the field name
+    const alias = subscriptionField.alias?.value
     const subscriptionName = subscriptionField.name.value
 
     // Extract parameters from the subscription field arguments
-    const params = extractArguments(subscriptionField.arguments || [])
+    const params = extractArguments(subscriptionField.arguments || [], variables || {})
 
     // Collect all fragment definitions from the document
     const fragmentDefinitions = document.definitions.filter(
@@ -35,25 +44,28 @@ export function extractSubscriptionQueryInfo (query: string) {
     // Extract fields from the subscription
     const fields = extractFields(subscriptionField.selectionSet, fragmentDefinitions)
 
-    return {
+    const result = {
       name: subscriptionName,
       fields,
-      ...(Object.keys(params).length > 0 ? { params } : {})
+      alias,
+      params,
+      variables
     }
+
+    return result
   } catch (error) {
     // In case of parsing errors or other issues, return null
-    console.error('Error parsing GraphQL query:', error)
-    return null
+    throw new Error('Error parsing GraphQL query', { cause: error })
   }
 }
 
 // Helper function to extract arguments from field arguments
-function extractArguments (args: readonly any[]): Record<string, any> {
+function extractArguments (args: readonly any[], variables: Record<string, any>): Record<string, any> {
   const result: Record<string, any> = {}
 
   for (const arg of args) {
     const name = arg.name.value
-    const value = extractArgumentValue(arg.value)
+    const value = extractArgumentValue(arg.value, variables)
     result[name] = value
   }
 
@@ -61,7 +73,7 @@ function extractArguments (args: readonly any[]): Record<string, any> {
 }
 
 // Helper function to extract a value from an argument
-function extractArgumentValue (value: any): any {
+function extractArgumentValue (value: any, variables: Record<string, any>): any {
   switch (value.kind) {
     case 'IntValue':
       return parseInt(value.value, 10)
@@ -74,21 +86,20 @@ function extractArgumentValue (value: any): any {
     case 'NullValue':
       return null
     case 'ListValue':
-      return value.values.map(extractArgumentValue)
+      return value.values.map((val: any) => extractArgumentValue(val, variables))
     case 'ObjectValue':
-      return extractObjectArguments(value.fields)
+      return extractObjectArguments(value.fields, variables)
     case 'Variable':
-      // Variables not supported in this implementation
-      return `$${value.name.value}`
+      return extractVariable(value.name.value, variables)
     default:
       return null
   }
 }
 
-function extractObjectArguments (fields: readonly any[]): Record<string, any> {
+function extractObjectArguments (fields: readonly any[], variables: Record<string, any> = {}): Record<string, any> {
   const obj: Record<string, any> = {}
   for (const field of fields) {
-    obj[field.name.value] = extractArgumentValue(field.value)
+    obj[field.name.value] = extractArgumentValue(field.value, variables)
   }
   return obj
 }
@@ -146,16 +157,18 @@ function extractFields (
  */
 export function extractSubscriptionResultInfo (result: Record<string, any>) {
   // Get the name of the subscription (first key in the result object)
-  const name = Object.keys(result)[0]
+  const resultName = Object.keys(result)[0]
 
   // Return an object with the subscription name and the data
   return {
-    name,
-    data: result[name]
+    name: resultName,
+    data: result[resultName],
+    // Include the result name (which could be an alias) for reference
+    resultName
   }
 }
 
-const siphash24Key = Buffer.from('000000000000000000')
-export function getQueryHash (query: string) {
-  return siphash24(Buffer.from(query), siphash24Key)
+// Get the value from the variables object
+function extractVariable (name: string, variables: Record<string, any>) {
+  return variables[name] !== undefined ? variables[name] : null
 }
