@@ -2,4 +2,3 @@ node_modules/
 dist/
 coverage/
 .nyc_output/
-pnpm-lock.yaml
