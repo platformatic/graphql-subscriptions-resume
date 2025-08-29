@@ -42,7 +42,7 @@ const state = new StatefulSubscriptions({
       key: 'id'
     }
   ],
-  logger: logger // Provide a Pino-compatible logger
+  logger: logger // Provide a pino compatible logger
 })
 ```
 

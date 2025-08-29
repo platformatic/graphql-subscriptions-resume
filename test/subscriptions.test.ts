@@ -945,7 +945,6 @@ test('should restore only subscriptions without lastValue', () => {
   // Call restoreSubscriptions
   state.restoreSubscriptions('clientId', mockSocket)
 
-  console.log(mockSocket.messages)
   assert.equal(mockSocket.messages.length, 3)
   assert.equal(mockSocket.messages[0].type, 'connection_init')
   assert.equal(mockSocket.messages[1].type, 'start')
