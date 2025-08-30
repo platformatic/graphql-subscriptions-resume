@@ -89,7 +89,7 @@ export class StatefulSubscriptions {
     try {
       s = extractSubscriptionQueryInfo(query, variables)
     } catch (err) {
-      this.logger.error({ err }, 'Error parsing GraphQL query')
+      this.logger?.error({ err }, 'Error parsing GraphQL query')
       return
     }
 
@@ -121,7 +121,7 @@ export class StatefulSubscriptions {
     if (!keyIncluded) {
       injectedKey = true
       s.fields.push(config.key)
-      this.logger.debug({ subscription: s.name, key: config.key }, 'Injecting missing key field into subscription')
+      this.logger?.debug({ subscription: s.name, key: config.key }, 'Injecting missing key field into subscription')
     }
 
     // Create a new subscription object with the required properties
@@ -154,7 +154,7 @@ export class StatefulSubscriptions {
   }
 
   updateSubscriptionState (clientId: string, result: any) {
-    this.logger.debug({ clientId, result }, 'Updating subscription state')
+    this.logger?.debug({ clientId, result }, 'Updating subscription state')
 
     const client = this.clients.get(clientId)
     if (!client) return
@@ -197,7 +197,7 @@ export class StatefulSubscriptions {
 
   // target is a WebSocket
   restoreSubscriptions (clientId: string, target: any) {
-    this.logger.debug({ clientId }, 'Restoring subscriptions')
+    this.logger?.debug({ clientId }, 'Restoring subscriptions')
 
     const client = this.clients.get(clientId)
     if (!client) return
@@ -209,7 +209,7 @@ export class StatefulSubscriptions {
 
     // Call the recovery subscription for all subscriptions for this client with the lastValue
     for (const subscription of client.subscriptions.values()) {
-      this.logger.debug({ subscription }, 'Restoring subscription')
+      this.logger?.debug({ subscription }, 'Restoring subscription')
 
       target.send(JSON.stringify({
         id: clientId,

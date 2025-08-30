@@ -1411,3 +1411,149 @@ test('should include injected field in recovery query', () => {
   assert.ok(payload?.query.includes('data'), 'Recovery query should include original fields')
   assert.ok(payload?.query.includes('offset'), 'Recovery query should include injected key field')
 })
+
+test('should work without logger for all methods', () => {
+  // Create StatefulSubscriptions without a proper logger (using undefined cast to Logger)
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset',
+        args: {
+          filter: 'important'
+        }
+      },
+      {
+        name: 'onUsers',
+        key: 'id'
+      }
+    ],
+    logger: undefined as unknown as Logger
+  })
+
+  // Test createClientState method
+  const clientState = state.createClientState()
+  assert.ok(clientState, 'createClientState should work without logger')
+  assert.ok(clientState.subscriptions instanceof Map, 'should return proper client state')
+
+  // Test addSubscription method
+  const query = 'subscription { onItems { id, offset, data } }'
+  
+  // This should not throw an error
+  state.addSubscription('client1', query)
+  
+  // Verify subscription was added correctly
+  const client = state.clients.get('client1')
+  assert.ok(client, 'Client should be created')
+  assert.equal(client.subscriptions.size, 1, 'Subscription should be added')
+  
+  const subscription = client.subscriptions.get('onItems')
+  assert.ok(subscription, 'Subscription should exist')
+  assert.equal(subscription.name, 'onItems', 'Subscription name should be correct')
+  assert.deepEqual(subscription.fields, ['id', 'offset', 'data'], 'Subscription fields should be correct')
+
+  // Test addSubscription with variables
+  state.addSubscription('client2', query, { lastValue: 50 })
+  const client2 = state.clients.get('client2')
+  const subscription2 = client2?.subscriptions.get('onItems')
+  assert.equal(subscription2?.lastValue, 50, 'lastValue from variables should work')
+
+  // Test addSubscription with missing key field (injection case)
+  const queryWithoutKey = 'subscription { onItems { id, data } }'
+  state.addSubscription('client3', queryWithoutKey)
+  const client3 = state.clients.get('client3')
+  const subscription3 = client3?.subscriptions.get('onItems')
+  assert.ok(subscription3?.injectedKey, 'Key injection should work without logger')
+  assert.ok(subscription3?.fields.includes('offset'), 'Injected key should be in fields')
+
+  // Test addSubscription with invalid query (should handle gracefully)
+  state.addSubscription('client4', 'invalid graphql query')
+  const client4 = state.clients.get('client4')
+  assert.equal(client4?.subscriptions.size, 0, 'Invalid query should not add subscription')
+
+  // Test updateSubscriptionState method
+  state.updateSubscriptionState('client1', {
+    onItems: {
+      id: 'item123',
+      offset: 100,
+      data: 'test data'
+    }
+  })
+  
+  // Verify state was updated
+  const updatedSubscription = client?.subscriptions.get('onItems')
+  assert.equal(updatedSubscription?.lastValue, 100, 'updateSubscriptionState should work without logger')
+
+  // Test updateSubscriptionState with injected key removal
+  state.updateSubscriptionState('client3', {
+    onItems: {
+      id: 'item456',
+      data: 'test data',
+      offset: 200
+    }
+  })
+  const updatedSubscription3 = client3?.subscriptions.get('onItems')
+  assert.equal(updatedSubscription3?.lastValue, 200, 'updateSubscriptionState should update lastValue')
+
+  // Test updateSubscriptionState with non-existent client (should not throw)
+  state.updateSubscriptionState('nonExistentClient', {
+    onItems: { id: 'test', offset: 1 }
+  })
+
+  // Test restoreSubscriptions method
+  const mockSocket = {
+    messages: [] as Array<{
+      type: string;
+      id?: string;
+      payload?: {
+        query: string;
+      };
+    }>,
+    send (message: string) {
+      this.messages.push(JSON.parse(message))
+    }
+  }
+
+  // This should not throw an error
+  state.restoreSubscriptions('client1', mockSocket)
+  
+  // Verify restoration worked correctly
+  assert.equal(mockSocket.messages.length, 2, 'Should send connection_init and start messages')
+  assert.equal(mockSocket.messages[0].type, 'connection_init', 'First message should be connection_init')
+  assert.equal(mockSocket.messages[1].type, 'start', 'Second message should be start')
+  assert.ok(mockSocket.messages[1].payload?.query.includes('offset: 100'), 'Recovery query should include last value')
+
+  // Test restoreSubscriptions with non-existent client (should not throw)
+  const mockSocket2 = {
+    messages: [] as Array<any>,
+    send (message: string) {
+      this.messages.push(JSON.parse(message))
+    }
+  }
+  state.restoreSubscriptions('nonExistentClient', mockSocket2)
+  assert.equal(mockSocket2.messages.length, 0, 'Should not send messages for non-existent client')
+
+  // Test removeAllSubscriptions method
+  state.removeAllSubscriptions('client1')
+  
+  // Verify subscriptions were removed
+  const clientAfterRemoval = state.clients.get('client1')
+  assert.equal(clientAfterRemoval?.subscriptions.size, 0, 'removeAllSubscriptions should work without logger')
+
+  // Test removeAllSubscriptions with non-existent client (should not throw)
+  state.removeAllSubscriptions('nonExistentClient')
+
+  // Test multiple subscriptions functionality
+  state.addSubscription('multiClient', 'subscription { onItems { id, offset, data } }')
+  state.addSubscription('multiClient', 'subscription { onUsers { id, name } }')
+  
+  const multiClient = state.clients.get('multiClient')
+  assert.equal(multiClient?.subscriptions.size, 2, 'Should handle multiple subscriptions without logger')
+
+  // Test with aliases
+  state.addSubscription('aliasClient', 'subscription { CustomItems: onItems { id, offset, data } }')
+  const aliasClient = state.clients.get('aliasClient')
+  const aliasSubscription = aliasClient?.subscriptions.get('CustomItems')
+  assert.ok(aliasSubscription, 'Should handle aliases without logger')
+  assert.equal(aliasSubscription?.alias, 'CustomItems', 'Alias should be stored correctly')
+})
