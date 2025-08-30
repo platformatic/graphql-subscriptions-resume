@@ -34,19 +34,19 @@ type Subscription = {
 function buildRecoveryQuery (subscription: Subscription): string {
   // If there's an alias, include it in the recovery query
   const aliasPrefix = subscription.alias ? `${subscription.alias}: ` : ''
-  
+
   // Prepare args for the query, starting with the key if any
-  const args = subscription.lastValue !== null && subscription.lastValue !== undefined 
-    ? [`${subscription.options.key}: ${JSON.stringify(subscription.lastValue)}`] 
+  const args = subscription.lastValue !== null && subscription.lastValue !== undefined
+    ? [`${subscription.options.key}: ${JSON.stringify(subscription.lastValue)}`]
     : []
-  
+
   // Add any fixed args from options if they exist
   if (subscription.options.args) {
     for (const [key, value] of Object.entries(subscription.options.args)) {
       args.push(`${key}: ${JSON.stringify(value)}`)
     }
   }
-  
+
   return `subscription { ${aliasPrefix}${subscription.options.name}(${args.join(', ')}) { ${subscription.fields.join(', ')} } }`
 }
 

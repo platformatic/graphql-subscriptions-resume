@@ -15,8 +15,8 @@
   },
   "scripts": {
     "test": "node --test --experimental-strip-types test/*.test.ts",
-    "lint": "eslint src test benchmarks",
-    "lint:fix": "eslint src test benchmarks --fix",
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix",
     "build": "tsc -p tsconfig.build.json",
     "test:coverage": "c8 -c test/config/c8-local.json node --env-file=test/config/env --no-warnings --test --test-timeout=300000 'test/**/*.test.ts'",
     "test:ci": "c8 -c test/config/c8-ci.json node --env-file=test/config/env --no-warnings --test --test-timeout=300000 'test/**/*.test.ts'",

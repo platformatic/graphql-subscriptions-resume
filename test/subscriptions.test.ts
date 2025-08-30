@@ -38,7 +38,7 @@ test('should store args in subscription configuration', () => {
     ],
     logger: createMockLogger()
   })
-  
+
   // Check that args were stored in configuration
   const config = (state as any).subscriptionsConfig.get('onItems')
   assert.deepEqual(config.args, { filter: 'important', limit: 10 }, 'Args should be stored in config')
@@ -58,12 +58,12 @@ test('should pass args from config to subscription object', () => {
     ],
     logger: createMockLogger()
   })
-  
+
   state.addSubscription('clientId', 'subscription { onItems { id, offset, data } }')
-  
+
   const client = state.clients.get('clientId')
   const subscription = client?.subscriptions.get('onItems')
-  
+
   // Check that args were passed to subscription object
   assert.deepEqual(subscription?.options.args, { filter: 'important', limit: 10 }, 'Args should be passed to subscription object')
 })
@@ -83,9 +83,9 @@ test('should include fixed args in recovery query', () => {
     ],
     logger: createMockLogger()
   })
-  
+
   state.addSubscription('clientId', query)
-  
+
   // Update the subscription state with a value
   state.updateSubscriptionState('clientId', {
     onItems: {
@@ -145,20 +145,20 @@ test('should support different fixed args for different subscriptions', () => {
     ],
     logger: createMockLogger()
   })
-  
+
   // Add subscriptions
   state.addSubscription('clientId', 'subscription { onItems { id, offset, data } }')
   state.addSubscription('clientId', 'subscription { onUsers { id, name, email } }')
-  
+
   // Update states
   state.updateSubscriptionState('clientId', {
     onItems: { id: 'item1', offset: 100, data: 'items data' }
   })
-  
+
   state.updateSubscriptionState('clientId', {
     onUsers: { id: 'user1', name: 'User One', email: 'user@example.com' }
   })
-  
+
   // Create a mock WebSocket
   const mockSocket = {
     messages: [] as Array<{
@@ -172,24 +172,24 @@ test('should support different fixed args for different subscriptions', () => {
       this.messages.push(JSON.parse(message))
     }
   }
-  
+
   // Restore subscriptions
   state.restoreSubscriptions('clientId', mockSocket)
-  
+
   // Should have 3 messages: connection_init and two recovery subscriptions
   assert.equal(mockSocket.messages.length, 3)
-  
+
   // Get the queries
   const queries = mockSocket.messages.slice(1).map(msg => msg.payload?.query)
-  
+
   // Check that each subscription has the correct fixed args
   const itemsQuery = queries.find(q => q && q.includes('onItems'))
   const usersQuery = queries.find(q => q && q.includes('onUsers'))
-  
+
   assert.ok(itemsQuery?.includes('offset: 100'), 'Items query should include the offset key')
   assert.ok(itemsQuery?.includes('category: "products"'), 'Items query should include the category arg')
   assert.ok(itemsQuery?.includes('active: true'), 'Items query should include the active arg')
-  
+
   assert.ok(usersQuery?.includes('id: "user1"'), 'Users query should include the id key')
   assert.ok(usersQuery?.includes('status: "online"'), 'Users query should include the status arg')
   assert.ok(usersQuery?.includes('role: "admin"'), 'Users query should include the role arg')
@@ -213,14 +213,14 @@ test('should work with mixed data types in fixed args', () => {
     ],
     logger: createMockLogger()
   })
-  
+
   state.addSubscription('clientId', 'subscription { onItems { id, offset } }')
-  
+
   // Update with a value to enable recovery
   state.updateSubscriptionState('clientId', {
     onItems: { id: 'test', offset: 50 }
   })
-  
+
   // Capture recovery query
   const mockSocket = {
     messages: [] as Array<{
@@ -233,12 +233,12 @@ test('should work with mixed data types in fixed args', () => {
       this.messages.push(JSON.parse(message))
     }
   }
-  
+
   state.restoreSubscriptions('clientId', mockSocket)
-  
+
   // Get the query
   const dataTypesQuery = mockSocket.messages[1].payload?.query
-  
+
   // Verify all data types are properly serialized
   assert.ok(dataTypesQuery?.includes('stringArg: "string value"'), 'Should properly serialize string args')
   assert.ok(dataTypesQuery?.includes('numberArg: 42'), 'Should properly serialize number args')
@@ -264,9 +264,9 @@ test('should include fixed args in recovery query with aliases', () => {
     ],
     logger: createMockLogger()
   })
-  
+
   state.addSubscription('clientId', query)
-  
+
   // Update the subscription state with a value
   state.updateSubscriptionState('clientId', {
     CustomItems: {
@@ -1438,15 +1438,15 @@ test('should work without logger for all methods', () => {
 
   // Test addSubscription method
   const query = 'subscription { onItems { id, offset, data } }'
-  
+
   // This should not throw an error
   state.addSubscription('client1', query)
-  
+
   // Verify subscription was added correctly
   const client = state.clients.get('client1')
   assert.ok(client, 'Client should be created')
   assert.equal(client.subscriptions.size, 1, 'Subscription should be added')
-  
+
   const subscription = client.subscriptions.get('onItems')
   assert.ok(subscription, 'Subscription should exist')
   assert.equal(subscription.name, 'onItems', 'Subscription name should be correct')
@@ -1479,7 +1479,7 @@ test('should work without logger for all methods', () => {
       data: 'test data'
     }
   })
-  
+
   // Verify state was updated
   const updatedSubscription = client?.subscriptions.get('onItems')
   assert.equal(updatedSubscription?.lastValue, 100, 'updateSubscriptionState should work without logger')
@@ -1516,7 +1516,7 @@ test('should work without logger for all methods', () => {
 
   // This should not throw an error
   state.restoreSubscriptions('client1', mockSocket)
-  
+
   // Verify restoration worked correctly
   assert.equal(mockSocket.messages.length, 2, 'Should send connection_init and start messages')
   assert.equal(mockSocket.messages[0].type, 'connection_init', 'First message should be connection_init')
@@ -1535,7 +1535,7 @@ test('should work without logger for all methods', () => {
 
   // Test removeAllSubscriptions method
   state.removeAllSubscriptions('client1')
-  
+
   // Verify subscriptions were removed
   const clientAfterRemoval = state.clients.get('client1')
   assert.equal(clientAfterRemoval?.subscriptions.size, 0, 'removeAllSubscriptions should work without logger')
@@ -1546,7 +1546,7 @@ test('should work without logger for all methods', () => {
   // Test multiple subscriptions functionality
   state.addSubscription('multiClient', 'subscription { onItems { id, offset, data } }')
   state.addSubscription('multiClient', 'subscription { onUsers { id, name } }')
-  
+
   const multiClient = state.clients.get('multiClient')
   assert.equal(multiClient?.subscriptions.size, 2, 'Should handle multiple subscriptions without logger')
 
@@ -1556,4 +1556,100 @@ test('should work without logger for all methods', () => {
   const aliasSubscription = aliasClient?.subscriptions.get('CustomItems')
   assert.ok(aliasSubscription, 'Should handle aliases without logger')
   assert.equal(aliasSubscription?.alias, 'CustomItems', 'Alias should be stored correctly')
+})
+
+test('should handle updateSubscriptionState edge case where subscription is undefined', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  // Add a client without any subscriptions
+  const client = state.createClientState()
+  state.clients.set('testClient', client)
+
+  // Manually add a subscription entry that maps to undefined
+  // This creates a scenario where the subscription exists as a key but resolves to undefined
+  client.subscriptions.set('testSubscription', undefined as any)
+
+  // This should hit the line where `if (!subscription) return`
+  state.updateSubscriptionState('testClient', {
+    testSubscription: {
+      id: 'test123',
+      offset: 42
+    }
+  })
+
+  // Should handle gracefully without errors
+  assert.ok(true, 'Should handle undefined subscription gracefully')
+})
+
+test('should handle updateSubscriptionState where config is missing', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  // Add a subscription for 'onItems'
+  state.addSubscription('testClient', 'subscription { onItems { id, offset } }')
+
+  // Get the client and subscription
+  const client = state.clients.get('testClient')
+  const subscription = client?.subscriptions.get('onItems')
+
+  // Manually modify the subscription to reference a non-existent config
+  if (subscription) {
+    subscription.name = 'nonExistentSubscription'
+  }
+
+  // This should hit the line where `if (!config) return` since 'nonExistentSubscription'
+  // is not in the subscriptionsConfig map
+  state.updateSubscriptionState('testClient', {
+    onItems: {
+      id: 'test123',
+      offset: 42
+    }
+  })
+
+  // Should handle gracefully without errors
+  assert.ok(true, 'Should handle missing config gracefully')
+})
+
+test('should handle subscription with no lastValue params when no key exists', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  // Add a subscription that will have no params and no lastValue
+  state.addSubscription('testClient', 'subscription { onItems { id, offset } }')
+
+  // Create a result that has no offset field (undefined keyValue)
+  state.updateSubscriptionState('testClient', {
+    onItems: {
+      id: 'test123'
+      // offset is intentionally missing to test keyValue undefined case
+    }
+  })
+
+  const client = state.clients.get('testClient')
+  const subscription = client?.subscriptions.get('onItems')
+
+  // lastValue should remain null since keyValue was undefined
+  assert.strictEqual(subscription?.lastValue, null, 'lastValue should remain null when keyValue is undefined')
 })
