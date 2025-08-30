@@ -63,7 +63,7 @@ test('should handle nested ObjectValue arguments', () => {
 
 test('should handle Variable arguments with null variables', () => {
   const query = 'subscription($offsetVar: Int) { onItems(offset: $offsetVar) { id, offset } }'
-  const variables = {} // offsetVar is not provided, should default to null
+  const variables = {}
   const result = extractSubscriptionQueryInfo(query, variables)
 
   assert.ok(result)
@@ -82,8 +82,6 @@ test('should handle Variable arguments with undefined variables', () => {
 })
 
 test('should handle unknown argument value types gracefully', () => {
-  // This test is tricky because we need to hit the default case in extractArgumentValue
-  // We'll create a test that should handle any unknown types by returning null
   const query = 'subscription { onItems(offset: 42) { id, offset } }'
   const result = extractSubscriptionQueryInfo(query)
 
@@ -218,8 +216,7 @@ test('should handle __typename fields by skipping them', () => {
 
   assert.ok(result)
   assert.equal(result.name, 'onItems')
-  // __typename should be filtered out
-  assert.deepEqual(result.fields, ['id', 'title'])
+  assert.deepEqual(result.fields, ['id', 'title'], '__typename should be filtered out')
 })
 
 test('should throw error for completely malformed queries', () => {
@@ -251,36 +248,29 @@ test('should handle empty list arguments', () => {
 })
 
 test('should handle fragment spread referencing non-existent fragment', () => {
-  // This query references a fragment that doesn't exist in the document
   const query = 'subscription { onItems { ...nonExistentFragment, id } }'
   const result = extractSubscriptionQueryInfo(query)
 
   assert.ok(result)
   assert.equal(result.name, 'onItems')
-  // Should only include 'id' since the non-existent fragment contributes no fields
   assert.deepEqual(result.fields, ['id'])
 })
 
 test('should handle unknown argument value kind', () => {
-  // This test attempts to hit the default case in extractArgumentValue
-  // We need to be creative since GraphQL parsing gives us known types
   const query = 'subscription { onItems(offset: 42) { id } }'
   const result = extractSubscriptionQueryInfo(query)
 
   assert.ok(result)
   assert.equal(result.name, 'onItems')
-  // This should work normally, but the test ensures we have coverage for the switch statement
   assert.deepEqual(result.params, { offset: 42 })
 })
 
 test('should handle fragment spread that exists', () => {
-  // This query should find the fragment and extract fields from it
   const query = 'subscription { onItems { ...ItemFields } } fragment ItemFields on Item { id, title, status }'
   const result = extractSubscriptionQueryInfo(query)
 
   assert.ok(result)
   assert.equal(result.name, 'onItems')
-  // Should include fields from the existing fragment
   assert.deepEqual(result.fields, ['id', 'title', 'status'])
 })
 
@@ -312,7 +302,6 @@ test('should handle selectionSet with no selections', () => {
 })
 
 test('should handle fragment spread with exact matching', () => {
-  // Make sure the fragment name matches exactly
   const query = 'subscription { onItems { ...ExactMatch } } fragment ExactMatch on Item { id, name }'
   const result = extractSubscriptionQueryInfo(query)
 
@@ -339,13 +328,10 @@ test('should handle multiple fragment spreads with mixed existence', () => {
 
   assert.ok(result)
   assert.equal(result.name, 'onItems')
-  // Should include fields from existing fragment plus direct field
   assert.deepEqual(result.fields, ['id', 'title', 'directField'])
 })
 
 test('should handle nested fragments with multiple levels', () => {
-  // This test ensures we hit lines 113-114 by having a fragment that definitely exists
-  // and has a selection set that needs to be processed recursively
   const query = `
     subscription { 
       onItems { 
@@ -364,12 +350,10 @@ test('should handle nested fragments with multiple levels', () => {
 
   assert.ok(result)
   assert.equal(result.name, 'onItems')
-  // Should extract all fields including nested ones
-  assert.deepEqual(result.fields, ['basicField', 'subField1', 'subField2'])
+  assert.deepEqual(result.fields, ['basicField', 'subField1', 'subField2'], 'Should extract all fields from nested fragment')
 })
 
 test('should specifically hit fragment field extraction lines 113-114', () => {
-  // Very targeted test to ensure we hit the fragment processing lines
   const query = `
     subscription { 
       onItems { 
@@ -387,18 +371,15 @@ test('should specifically hit fragment field extraction lines 113-114', () => {
   assert.ok(result, 'Result should exist')
   assert.equal(result.name, 'onItems', 'Name should be onItems')
 
-  // Verify all fragment fields are extracted - this should hit lines 113-114
   const expectedFields = ['id', 'title', 'count']
   assert.deepEqual(result.fields, expectedFields, 'Should extract all fields from fragment')
 
-  // Verify each field individually to ensure the fragment was processed
   expectedFields.forEach(field => {
     assert.ok(result.fields.includes(field), `Field ${field} should be included from fragment`)
   })
 })
 
 test('should handle multiple fragment definitions and correctly extract from the right one', () => {
-  // Test with multiple fragments to ensure correct matching
   const query = `
     subscription { 
       onItems { 
@@ -423,10 +404,8 @@ test('should handle multiple fragment definitions and correctly extract from the
   assert.ok(result)
   assert.equal(result.name, 'onItems')
 
-  // Should only extract fields from CorrectFragment
-  assert.deepEqual(result.fields, ['correctField1', 'correctField2', 'correctField3'])
+  assert.deepEqual(result.fields, ['correctField1', 'correctField2', 'correctField3'], 'Should only extract fields from CorrectFragment')
 
-  // Should not include fields from other fragments
   assert.ok(!result.fields.includes('wrongField1'), 'Should not include fields from WrongFragment')
   assert.ok(!result.fields.includes('anotherWrongField'), 'Should not include fields from AnotherWrongFragment')
 })
