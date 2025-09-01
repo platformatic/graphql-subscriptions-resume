@@ -1,5 +1,6 @@
 import { extractSubscriptionQueryInfo, extractSubscriptionResultInfo, type SubscriptionInfo } from './graphql-tools.ts'
 import { type Logger } from 'pino'
+// @ts-ignore
 import abstractLogger from 'abstract-logging'
 
 type SubscriptionOptions = {
