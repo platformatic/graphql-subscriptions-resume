@@ -49,7 +49,7 @@ function buildRecoveryQuery (subscription: Subscription): string {
     }
   }
 
-  return `subscription { ${aliasPrefix}${subscription.options.name}(${args.join(', ')}) { ${subscription.fields.join(', ')} } }`
+  return `subscription { ${aliasPrefix}${subscription.options.name}${args.length > 0 ? `(${args.join(', ')})` : ''} { ${subscription.fields.join(', ')} } }`
 }
 
 export class StatefulSubscriptions {
