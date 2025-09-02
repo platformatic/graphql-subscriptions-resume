@@ -1,5 +1,7 @@
 import { extractSubscriptionQueryInfo, extractSubscriptionResultInfo, type SubscriptionInfo } from './graphql-tools.ts'
 import { type Logger } from 'pino'
+// @ts-ignore
+import abstractLogger from 'abstract-logging'
 
 type SubscriptionOptions = {
   name: string
@@ -34,20 +36,20 @@ type Subscription = {
 function buildRecoveryQuery (subscription: Subscription): string {
   // If there's an alias, include it in the recovery query
   const aliasPrefix = subscription.alias ? `${subscription.alias}: ` : ''
-  
+
   // Prepare args for the query, starting with the key if any
-  const args = subscription.lastValue !== null && subscription.lastValue !== undefined 
-    ? [`${subscription.options.key}: ${JSON.stringify(subscription.lastValue)}`] 
+  const args = subscription.lastValue !== null && subscription.lastValue !== undefined
+    ? [`${subscription.options.key}: ${JSON.stringify(subscription.lastValue)}`]
     : []
-  
+
   // Add any fixed args from options if they exist
   if (subscription.options.args) {
     for (const [key, value] of Object.entries(subscription.options.args)) {
       args.push(`${key}: ${JSON.stringify(value)}`)
     }
   }
-  
-  return `subscription { ${aliasPrefix}${subscription.options.name}(${args.join(', ')}) { ${subscription.fields.join(', ')} } }`
+
+  return `subscription { ${aliasPrefix}${subscription.options.name}${args.length > 0 ? `(${args.join(', ')})` : ''} { ${subscription.fields.join(', ')} } }`
 }
 
 export class StatefulSubscriptions {
@@ -61,7 +63,7 @@ export class StatefulSubscriptions {
   constructor (options: StatefulSubscriptionsOptions) {
     this.clients = new Map()
     this.subscriptionsConfig = new Map()
-    this.logger = options.logger
+    this.logger = options.logger ?? abstractLogger
 
     // Store subscription configurations for easy access
     for (const subscription of options.subscriptions) {

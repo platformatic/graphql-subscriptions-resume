@@ -34,7 +34,9 @@ export function extractSubscriptionQueryInfo (query: string, variables?: Record<
     const subscriptionName = subscriptionField.name.value
 
     // Extract parameters from the subscription field arguments
-    const params = extractArguments(subscriptionField.arguments || [], variables || {})
+    const args = subscriptionField.arguments!
+    const vars: any = variables || {}
+    const params = extractArguments(args, vars)
 
     // Collect all fragment definitions from the document
     const fragmentDefinitions = document.definitions.filter(

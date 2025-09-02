@@ -98,9 +98,9 @@ function onOutgoingMessage(clientId, message) {
 }
 ```
 
-### Complete Example with Platformatic GraphQL Proxy
+### Complete Example with Platformatic GraphQL Composer
 
-Here's a complete example using the library with Platformatic's GraphQL proxy:
+Here's a complete example using the library with Platformatic's GraphQL Composer:
 
 ```javascript
 'use strict'
@@ -191,7 +191,7 @@ new StatefulSubscriptions(options: StatefulSubscriptionsOptions)
   - `name`: The name of the subscription as defined in your GraphQL schema
   - `key`: The field name used to track the subscription's position/state
   - `args`: (Optional) Fixed arguments that will be included in every recovery query
-- `logger`: A Pino-compatible logger instance
+- `logger`: A pino compatibile logger instance
 
 #### Methods
 
