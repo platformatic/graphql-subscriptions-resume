@@ -463,6 +463,38 @@ test('should send recovery subscription with the last received key', () => {
   assert.equal(payload?.query, 'subscription { onItems(offset: 42) { id, offset, data } }')
 })
 
+test('should send connection_init payload', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscriptionInit('clientId', { token: '1234567890' })
+
+  const mockSocket = {
+    messages: [] as Array<{
+      type: string;
+      id?: string;
+      payload?: {
+        token: string;
+      };
+    }>,
+    send (message: string) {
+      this.messages.push(JSON.parse(message))
+    }
+  }
+
+  state.restoreSubscriptions('clientId', mockSocket)
+
+  assert.equal(mockSocket.messages[0].type, 'connection_init')
+  assert.equal(mockSocket.messages[0].payload?.token, '1234567890')
+})
+
 test('should get last value from params if any', () => {
   const query = 'subscription { onItems(offset: 42) { id, offset, data } }'
   const state = new StatefulSubscriptions({
