@@ -15,6 +15,7 @@ type StatefulSubscriptionsOptions = {
 }
 
 type ClientState = {
+  init: any // connection_init payload
   subscriptions: Map<string, Subscription>
 }
 
@@ -76,8 +77,19 @@ export class StatefulSubscriptions {
 
   createClientState () {
     return {
+      init: undefined,
       subscriptions: new Map()
     }
+  }
+
+  addSubscriptionInit (clientId: string, payload: any) {
+    let client = this.clients.get(clientId)
+    if (!client) {
+      client = this.createClientState()
+      this.clients.set(clientId, client)
+    }
+
+    client.init = payload
   }
 
   addSubscription (clientId: string, query: string, variables?: Record<string, any>) {
@@ -206,7 +218,8 @@ export class StatefulSubscriptions {
 
     // Initialize connection
     target.send(JSON.stringify({
-      type: 'connection_init'
+      type: 'connection_init',
+      payload: client.init
     }))
 
     // Call the recovery subscription for all subscriptions for this client with the lastValue

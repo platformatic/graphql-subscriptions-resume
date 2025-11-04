@@ -138,25 +138,35 @@ const hooks = {
     context.log.info({ m, binary: message.binary, clientId: source.clientId }, 'onIncomingMessage')
     source.clientId = m.id
 
-    if (m.type !== 'start') {
+    if (m.type === 'start' || m.type === 'subscribe') {
+      try {
+        state.addSubscription(source.clientId, m.payload.query, m.payload.variables)
+      } catch (err) {
+        context.log.error({ err, clientId: source.clientId }, 'Error adding subscription')
+      }
       return
     }
 
-    try {
-      state.addSubscription(source.clientId, m.payload.query, m.payload.variables)
-    } catch (err) {
-      context.log.error({ err, m, clientId: source.clientId }, 'Error adding subscription')
+    if(m.type === 'connection_init') {
+      try {
+        state.addSubscriptionInit(source.clientId, m.payload)
+      } catch (err) {
+        context.log.error({ err, clientId: source.clientId }, 'Error adding subscription init')
+      }
     }
   },
   onOutgoingMessage: (context, source, target, message) => {
     const m = JSON.parse(message.data.toString('utf-8'))
     context.log.info({ m, binary: message.binary, clientId: source.clientId }, 'onOutgoingMessage')
 
-    if (m.type !== 'data') {
+    if (m.type === 'data') {
+      try {
+        state.updateSubscriptionState(source.clientId, m.payload.data)
+      } catch (err) {
+        context.log.error({ err, clientId: source.clientId }, 'Error updating subscription state')
+      }
       return
     }
-
-    state.updateSubscriptionState(source.clientId, m.payload.data)
   }
 }
 
@@ -207,6 +217,18 @@ Registers a new subscription for a client. Parses the GraphQL query and stores i
 - `clientId`: A unique identifier for the client
 - `query`: The GraphQL subscription query
 - `variables`: Optional GraphQL variables for the query
+
+#### `addSubscriptionInit`
+
+```typescript
+addSubscriptionInit(clientId: string, payload: any): void
+```
+
+Registers the connection_init payload for a client.
+
+**Parameters:**
+- `clientId`: A unique identifier for the client
+- `payload`: payload content
 
 ##### `updateSubscriptionState`
 
