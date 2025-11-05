@@ -80,6 +80,8 @@ function onIncomingMessage(clientId, message) {
         clientId,
         parsedMessage.payload.query,
         parsedMessage.payload.variables
+        parsedMessage.id,
+        parsedMessage.type,
       )
     } catch (err) {
       console.error('Error adding subscription', err)
@@ -123,26 +125,32 @@ const state = new StatefulSubscriptions({
 
 const hooks = {
   onConnect: (context, source, target) => {
-    context.log.info({ clientId: source.clientId }, 'onConnect')
+    context.log.debug({ clientId: source.clientId }, 'onConnect')
   },
   onDisconnect: (context, source, target) => {
-    context.log.info({ clientId: source.clientId }, 'onDisconnect (client disconnected)')
+    context.log.debug({ clientId: source.clientId }, 'onDisconnect (client disconnected)')
     state.removeAllSubscriptions(source.clientId)
   },
   onReconnect: (context, source, target) => {
-    context.log.info({ clientId: source.clientId }, 'onReconnect')
+    context.log.debug({ clientId: source.clientId }, 'onReconnect')
     state.restoreSubscriptions(source.clientId, target)
   },
   onIncomingMessage: (context, source, target, message) => {
     const m = JSON.parse(message.data.toString('utf-8'))
-    context.log.info({ m, binary: message.binary, clientId: source.clientId }, 'onIncomingMessage')
-    source.clientId = m.id
+    context.log.debug({ m, binary: message.binary, clientId: source.clientId }, 'onIncomingMessage')
+    if(!source.clientId){
+      source.clientId = randomUUID()
+    }
+
+    if (!m || !m.type) {
+      return
+    }
 
     if (m.type === 'start' || m.type === 'subscribe') {
       try {
-        state.addSubscription(source.clientId, m.payload.query, m.payload.variables)
+        state.addSubscription(source.clientId, m.payload.query, m.payload.variables, m.id, m.type)
       } catch (err) {
-        context.log.error({ err, clientId: source.clientId }, 'Error adding subscription')
+        context.log.error({ err, m, clientId: source.clientId }, 'Error adding subscription')
       }
       return
     }
@@ -151,19 +159,33 @@ const hooks = {
       try {
         state.addSubscriptionInit(source.clientId, m.payload)
       } catch (err) {
-        context.log.error({ err, clientId: source.clientId }, 'Error adding subscription init')
+        context.log.error({ err, payload, clientId: source.clientId }, 'Error adding subscription init')
       }
+      return
+    }    
+
+    if (m.type === 'complete' || m.type === 'stop') {
+      try {
+        if (m.id) {
+          state.removeSubscription(source.clientId, m.id)
+        } else {
+          state.removeAllSubscriptions(source.clientId)
+        }
+      } catch (err) {
+        context.log.error({ err, m, clientId: source.clientId }, 'Error removing subscription')
+      }
+      return
     }
   },
   onOutgoingMessage: (context, source, target, message) => {
     const m = JSON.parse(message.data.toString('utf-8'))
-    context.log.info({ m, binary: message.binary, clientId: source.clientId }, 'onOutgoingMessage')
+    context.log.debug({ m, binary: message.binary, clientId: source.clientId }, 'onOutgoingMessage')
 
-    if (m.type === 'data') {
+    if (m.type === 'data' || m.type === 'next') {
       try {
         state.updateSubscriptionState(source.clientId, m.payload.data)
       } catch (err) {
-        context.log.error({ err, clientId: source.clientId }, 'Error updating subscription state')
+        context.log.error({ err, m, clientId: source.clientId }, 'Error updating subscription state')
       }
       return
     }
@@ -208,7 +230,7 @@ new StatefulSubscriptions(options: StatefulSubscriptionsOptions)
 ##### `addSubscription`
 
 ```typescript
-addSubscription(clientId: string, query: string, variables?: Record<string, any>): void
+addSubscription(clientId: string, query: string, variables?: Record<string, any>, subscriptionId?: string, subscriptionType? string): void
 ```
 
 Registers a new subscription for a client. Parses the GraphQL query and stores information about the subscription.
@@ -217,11 +239,13 @@ Registers a new subscription for a client. Parses the GraphQL query and stores i
 - `clientId`: A unique identifier for the client
 - `query`: The GraphQL subscription query
 - `variables`: Optional GraphQL variables for the query
+- `subscriptionId`: A unique identifier for the subscription; this value is optional due to websocket subprotocol
+- `subscriptionType`: The command type for the subscription; this value is optional due to websocket subprotocol, default is `start`, alernative value can be `subscribe`
 
 #### `addSubscriptionInit`
 
 ```typescript
-addSubscriptionInit(clientId: string, payload: any): void
+addSubscriptionInit(clientId: string, payload): void
 ```
 
 Registers the connection_init payload for a client.
@@ -233,7 +257,7 @@ Registers the connection_init payload for a client.
 ##### `updateSubscriptionState`
 
 ```typescript
-updateSubscriptionState(clientId: string, result: any): void
+updateSubscriptionState(clientId: string, result): void
 ```
 
 Updates the state of a client's subscription based on the latest result.
@@ -245,7 +269,7 @@ Updates the state of a client's subscription based on the latest result.
 ##### `restoreSubscriptions`
 
 ```typescript
-restoreSubscriptions(clientId: string, target: any): void
+restoreSubscriptions(clientId: string, target): void
 ```
 
 Restores all subscriptions for a client after reconnection.
@@ -253,6 +277,18 @@ Restores all subscriptions for a client after reconnection.
 **Parameters:**
 - `clientId`: The client's unique identifier
 - `target`: The WebSocket connection to send subscription requests to
+
+##### `removeSubscription`
+
+```typescript
+removeSubscription(clientId: string, subscriptionId: string): void
+```
+
+Removes the subscription for a specific client by subscription id.
+
+**Parameters:**
+- `clientId`: The client's unique identifier
+- `subscriptionId`: A unique identifier for the subscription; note this value may not be present due to websocket message
 
 ##### `removeAllSubscriptions`
 

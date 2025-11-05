@@ -17,6 +17,7 @@ type StatefulSubscriptionsOptions = {
 type ClientState = {
   init: any // connection_init payload
   subscriptions: Map<string, Subscription>
+  ids: Map<string, string> // subscriptionId -> subscription name
 }
 
 type Subscription = {
@@ -27,6 +28,9 @@ type Subscription = {
   lastValue: any
   alias?: string
   injectedKey?: boolean
+
+  id?: string // websocket subscription id
+  type?: string // websocket subscription type
 }
 
 /**
@@ -78,7 +82,8 @@ export class StatefulSubscriptions {
   createClientState () {
     return {
       init: undefined,
-      subscriptions: new Map()
+      subscriptions: new Map(),
+      ids: new Map()
     }
   }
 
@@ -92,7 +97,7 @@ export class StatefulSubscriptions {
     client.init = payload
   }
 
-  addSubscription (clientId: string, query: string, variables?: Record<string, any>) {
+  addSubscription (clientId: string, query: string, variables?: Record<string, any>, subscriptionId?: string, subscriptionType?: string) {
     let client = this.clients.get(clientId)
     if (!client) {
       client = this.createClientState()
@@ -115,7 +120,6 @@ export class StatefulSubscriptions {
     // Determine the subscription identifier - use alias if available, otherwise use name
     const subscriptionName = s.alias || s.name
 
-    // TODO support different subscriptions with same name, with different fields/fragments/values
     if (client.subscriptions.has(subscriptionName)) {
       return
     }
@@ -164,6 +168,11 @@ export class StatefulSubscriptions {
     }
 
     // Store using the subscription identifier (alias or name)
+    if (subscriptionId) {
+      subscription.id = subscriptionId
+      client.ids.set(subscriptionId, subscriptionName)
+    }
+    subscription.type = subscriptionType || 'start'
     client.subscriptions.set(subscriptionName, subscription)
   }
 
@@ -227,8 +236,8 @@ export class StatefulSubscriptions {
       this.logger.debug({ subscription }, 'Restoring subscription')
 
       target.send(JSON.stringify({
-        id: clientId,
-        type: 'start',
+        id: subscription.id,
+        type: subscription.type || 'start',
         payload: {
           query: buildRecoveryQuery(subscription)
         }
@@ -236,10 +245,24 @@ export class StatefulSubscriptions {
     }
   }
 
+  removeSubscription (clientId: string, subscriptionId: string) {
+    if (!subscriptionId) return
+
+    const client = this.clients.get(clientId)
+    if (!client) return
+
+    const subscriptionName = client.ids.get(subscriptionId)
+    if (!subscriptionName) return
+
+    client.subscriptions.delete(subscriptionName)
+    client.ids.delete(subscriptionId)
+  }
+
   removeAllSubscriptions (clientId: string) {
     const client = this.clients.get(clientId)
     if (!client) return
 
     client.subscriptions.clear()
+    client.ids.clear()
   }
 }

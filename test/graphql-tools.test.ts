@@ -283,7 +283,7 @@ test('should handle Enum value arguments (if available)', () => {
   assert.ok('status' in (result?.params || {}))
 })
 
-test.only('should extract query info without arguments', () => {
+test('should extract query info without arguments', () => {
   const query = 'subscription { onItems { id, status } }'
 
   const result = extractSubscriptionQueryInfo(query)

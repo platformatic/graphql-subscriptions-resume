@@ -457,7 +457,6 @@ test('should send recovery subscription with the last received key', () => {
 
   const startMessage = mockSocket.messages[1]
   assert.equal(startMessage.type, 'start')
-  assert.equal(startMessage.id, 'clientId')
 
   const payload = startMessage.payload
   assert.equal(payload?.query, 'subscription { onItems(offset: 42) { id, offset, data } }')
@@ -1523,4 +1522,31 @@ test('should handle subscription with no lastValue params when no key exists', (
   const subscription = client?.subscriptions.get('onItems')
 
   assert.strictEqual(subscription?.lastValue, null, 'lastValue should remain null when keyValue is undefined')
+})
+
+test('should remove subscription by subscriptionId', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      },
+      {
+        name: 'onMessages',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('testClient', 'subscription { onItems { id, offset } }')
+  state.addSubscription('testClient', 'subscription { onMessages { id, offset } }', undefined, 'id-1')
+
+  state.removeSubscription('testClient', 'id-1')
+
+  const client = state.clients.get('testClient')!
+  assert.equal(client.subscriptions.size, 1)
+  assert.ok(client.subscriptions.has('onItems'), 'onItems subscription should remain')
+  assert.equal(client.ids.size, 0, 'id-1 should be removed')
+  assert.ok(!client.ids.has('id-1'), 'id-1 should be removed')
 })
