@@ -30,7 +30,7 @@ type Subscription = {
   injectedKey?: boolean
 
   id?: string // websocket subscription id
-  type?: string // websocket subscription type
+  type: string // websocket subscription type
 }
 
 /**
@@ -154,7 +154,8 @@ export class StatefulSubscriptions {
       lastValue: (variables && 'lastValue' in variables)
         ? variables.lastValue
         : s.params?.[config.key] || null,
-      injectedKey
+      injectedKey,
+      type: subscriptionType || 'start'
     }
 
     // Add params if they exist
@@ -237,7 +238,7 @@ export class StatefulSubscriptions {
 
       target.send(JSON.stringify({
         id: subscription.id,
-        type: subscription.type || 'start',
+        type: subscription.type,
         payload: {
           query: buildRecoveryQuery(subscription)
         }
