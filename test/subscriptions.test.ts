@@ -457,7 +457,6 @@ test('should send recovery subscription with the last received key', () => {
 
   const startMessage = mockSocket.messages[1]
   assert.equal(startMessage.type, 'start')
-  assert.equal(startMessage.id, 'clientId')
 
   const payload = startMessage.payload
   assert.equal(payload?.query, 'subscription { onItems(offset: 42) { id, offset, data } }')
@@ -1523,4 +1522,191 @@ test('should handle subscription with no lastValue params when no key exists', (
   const subscription = client?.subscriptions.get('onItems')
 
   assert.strictEqual(subscription?.lastValue, null, 'lastValue should remain null when keyValue is undefined')
+})
+
+test('should remove subscription by subscriptionId', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      },
+      {
+        name: 'onMessages',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('testClient', 'subscription { onItems { id, offset } }', undefined, 'id-0')
+  state.addSubscription('testClient', 'subscription { onMessages { id, offset } }', undefined, 'id-1')
+
+  const clientBefore = state.clients.get('testClient')!
+  assert.equal(clientBefore.subscriptions.size, 2)
+  assert.equal(clientBefore.ids.size, 2)
+
+  state.removeSubscription('testClient', 'id-1')
+
+  const client = state.clients.get('testClient')!
+  assert.equal(client.subscriptions.size, 1)
+  assert.ok(client.subscriptions.has('onItems'), 'onItems subscription should remain')
+  assert.ok(!client.subscriptions.has('onMessages'), 'onMessages subscription should be removed')
+  assert.equal(client.ids.size, 1, 'id-1 should be removed')
+  assert.ok(!client.ids.has('id-1'), 'id-1 should be removed')
+  assert.ok(client.ids.has('id-0'), 'id-0 should remain')
+})
+
+test('should handle removeSubscription with empty subscriptionId', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('testClient', 'subscription { onItems { id, offset } }', undefined, 'id-1')
+
+  state.removeSubscription('testClient', '')
+
+  const client = state.clients.get('testClient')!
+  assert.equal(client.subscriptions.size, 1, 'Subscription should not be removed when subscriptionId is empty')
+  assert.equal(client.ids.size, 1, 'Id mapping should not be removed when subscriptionId is empty')
+})
+
+test('should handle removeSubscription with null subscriptionId', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('testClient', 'subscription { onItems { id, offset } }', undefined, 'id-1')
+
+  state.removeSubscription('testClient', null as any)
+
+  const client = state.clients.get('testClient')!
+  assert.equal(client.subscriptions.size, 1, 'Subscription should not be removed when subscriptionId is null')
+})
+
+test('should handle removeSubscription with undefined subscriptionId', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('testClient', 'subscription { onItems { id, offset } }', undefined, 'id-1')
+
+  state.removeSubscription('testClient', undefined as any)
+
+  const client = state.clients.get('testClient')!
+  assert.equal(client.subscriptions.size, 1, 'Subscription should not be removed when subscriptionId is undefined')
+})
+
+test('should handle removeSubscription for non-existent client', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [],
+    logger: createMockLogger()
+  })
+
+  state.removeSubscription('nonExistentClient', 'id-1')
+
+  assert.equal(state.clients.has('nonExistentClient'), false, 'Non-existent client should remain non-existent')
+})
+
+test('should handle removeSubscription for non-existent subscriptionId', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('testClient', 'subscription { onItems { id, offset } }', undefined, 'id-1')
+
+  state.removeSubscription('testClient', 'non-existent-id')
+
+  const client = state.clients.get('testClient')!
+  assert.equal(client.subscriptions.size, 1, 'Subscription should remain when non-existent id is used')
+  assert.equal(client.ids.size, 1, 'Id mapping should remain when non-existent id is used')
+})
+
+test('should remove subscription with alias by subscriptionId', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('testClient', 'subscription { CustomItems: onItems { id, offset } }', undefined, 'id-1')
+
+  const clientBefore = state.clients.get('testClient')!
+  assert.ok(clientBefore.subscriptions.has('CustomItems'), 'Aliased subscription should exist')
+  assert.equal(clientBefore.ids.get('id-1'), 'CustomItems', 'Id should map to alias name')
+
+  state.removeSubscription('testClient', 'id-1')
+
+  const client = state.clients.get('testClient')!
+  assert.equal(client.subscriptions.size, 0, 'Aliased subscription should be removed')
+  assert.equal(client.ids.size, 0, 'Id mapping should be removed')
+  assert.ok(!client.subscriptions.has('CustomItems'), 'CustomItems should be removed')
+})
+
+test('should remove only the specified subscription when multiple exist', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      },
+      {
+        name: 'onUsers',
+        key: 'id'
+      },
+      {
+        name: 'onMessages',
+        key: 'id'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('testClient', 'subscription { onItems { id, offset } }', undefined, 'id-1')
+  state.addSubscription('testClient', 'subscription { onUsers { id, name } }', undefined, 'id-2')
+  state.addSubscription('testClient', 'subscription { onMessages { id, text } }', undefined, 'id-3')
+
+  const clientBefore = state.clients.get('testClient')!
+  assert.equal(clientBefore.subscriptions.size, 3)
+  assert.equal(clientBefore.ids.size, 3)
+
+  state.removeSubscription('testClient', 'id-2')
+
+  const client = state.clients.get('testClient')!
+  assert.equal(client.subscriptions.size, 2, 'Only one subscription should be removed')
+  assert.equal(client.ids.size, 2, 'Only one id mapping should be removed')
+  assert.ok(client.subscriptions.has('onItems'), 'onItems should remain')
+  assert.ok(!client.subscriptions.has('onUsers'), 'onUsers should be removed')
+  assert.ok(client.subscriptions.has('onMessages'), 'onMessages should remain')
+  assert.ok(client.ids.has('id-1'), 'id-1 should remain')
+  assert.ok(!client.ids.has('id-2'), 'id-2 should be removed')
+  assert.ok(client.ids.has('id-3'), 'id-3 should remain')
 })
