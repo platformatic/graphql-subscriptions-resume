@@ -1,6 +1,6 @@
 {
   "name": "@platformatic/graphql-subscriptions-resume",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "An addon to @fastify/http-proxy to resume GraphQL Subscriptions",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
