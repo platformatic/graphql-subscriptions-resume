@@ -2,6 +2,7 @@ import { StatefulSubscriptions } from '../src/index.ts'
 import assert from 'assert'
 import { test } from 'node:test'
 import { type Logger } from 'pino'
+import { buildSchema, parse, validate } from 'graphql'
 
 const createMockLogger = () => {
   const logger = Object.assign(
@@ -459,7 +460,7 @@ test('should send recovery subscription with the last received key', () => {
   assert.equal(startMessage.type, 'start')
 
   const payload = startMessage.payload
-  assert.equal(payload?.query, 'subscription { onItems(offset: 42) { id, offset, data } }')
+  assert.equal(payload?.query, 'subscription { onItems(offset: 42) {\n  id\n  offset\n  data\n} }')
 })
 
 test('should send connection_init payload', () => {
@@ -964,8 +965,8 @@ test('should restore multiple subscriptions with lastValues', () => {
   assert.equal(mockSocket.messages[2].type, 'start')
 
   const queries = mockSocket.messages.slice(1).map(msg => msg.payload?.query)
-  assert.ok(queries.some(q => q === 'subscription { onItems(offset: 42) { id, offset, data } }'))
-  assert.ok(queries.some(q => q === 'subscription { onUsers(id: "user456") { id, name } }'))
+  assert.ok(queries.some(q => q === 'subscription { onItems(offset: 42) {\n  id\n  offset\n  data\n} }'))
+  assert.ok(queries.some(q => q === 'subscription { onUsers(id: "user456") {\n  id\n  name\n} }'))
 })
 
 test('should support subscription aliases', () => {
@@ -1020,7 +1021,7 @@ test('should support subscription aliases', () => {
   assert.equal(startMessage.type, 'start')
 
   const payload = startMessage.payload
-  assert.equal(payload?.query, 'subscription { Items: onItems(offset: 100) { id, offset, field1, field2 } }')
+  assert.equal(payload?.query, 'subscription { Items: onItems(offset: 100) {\n  id\n  offset\n  field1\n  field2\n} }')
 })
 
 test('should handle non-existent client in restoreSubscriptions', () => {
@@ -1709,4 +1710,309 @@ test('should remove only the specified subscription when multiple exist', () => 
   assert.ok(client.ids.has('id-1'), 'id-1 should remain')
   assert.ok(!client.ids.has('id-2'), 'id-2 should be removed')
   assert.ok(client.ids.has('id-3'), 'id-3 should remain')
+})
+
+test('should build a valid recovery query for subscriptions with nested payloads', () => {
+  const schema = buildSchema(`
+    type RiskSimulationMargin {
+      total_margin: Float
+      currency: String
+    }
+
+    type RiskSimulation {
+      id: ID
+      cursor: String
+      margin_details: RiskSimulationMargin
+    }
+
+    type Query {
+      _: Boolean
+    }
+
+    type Subscription {
+      onRiskSimulationsFeed(cursor: String): RiskSimulation
+    }
+  `)
+
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onRiskSimulationsFeed',
+        key: 'cursor'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  const query = 'subscription { onRiskSimulationsFeed(cursor: "c1") { id cursor margin_details { total_margin currency } } }'
+  state.addSubscription('clientId', query)
+
+  state.updateSubscriptionState('clientId', {
+    onRiskSimulationsFeed: {
+      id: 'rs1',
+      cursor: 'c2',
+      margin_details: { total_margin: 10.5, currency: 'EUR' }
+    }
+  })
+
+  const mockSocket = {
+    messages: [] as Array<{
+      type: string;
+      id?: string;
+      payload?: {
+        query: string;
+      };
+    }>,
+    send (message: string) {
+      this.messages.push(JSON.parse(message))
+    }
+  }
+
+  state.restoreSubscriptions('clientId', mockSocket)
+
+  const recoveryQuery = mockSocket.messages[1].payload?.query
+  assert.ok(recoveryQuery, 'Recovery query should be sent')
+
+  assert.ok(recoveryQuery.includes('cursor: "c2"'), 'Recovery query should include the last cursor value')
+  assert.ok(recoveryQuery.includes('margin_details'), 'Recovery query should keep the nested field')
+
+  const errors = validate(schema, parse(recoveryQuery))
+  assert.deepEqual(errors, [], 'Recovery query should validate against the schema')
+})
+
+test('should build a valid recovery query for nested payloads selected through fragments', () => {
+  const schema = buildSchema(`
+    type RiskSimulationMargin {
+      total_margin: Float
+      currency: String
+    }
+
+    type RiskSimulation {
+      id: ID
+      cursor: String
+      margin_details: RiskSimulationMargin
+    }
+
+    type Query {
+      _: Boolean
+    }
+
+    type Subscription {
+      onRiskSimulationsFeed(cursor: String): RiskSimulation
+    }
+  `)
+
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onRiskSimulationsFeed',
+        key: 'cursor'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  const query = `
+    subscription {
+      onRiskSimulationsFeed(cursor: "c1") {
+        id
+        ...RiskSimulationFields
+      }
+    }
+    fragment RiskSimulationFields on RiskSimulation {
+      cursor
+      margin_details { total_margin currency }
+    }
+  `
+  state.addSubscription('clientId', query)
+
+  state.updateSubscriptionState('clientId', {
+    onRiskSimulationsFeed: {
+      id: 'rs1',
+      cursor: 'c2',
+      margin_details: { total_margin: 10.5, currency: 'EUR' }
+    }
+  })
+
+  const mockSocket = {
+    messages: [] as Array<{
+      type: string;
+      id?: string;
+      payload?: {
+        query: string;
+      };
+    }>,
+    send (message: string) {
+      this.messages.push(JSON.parse(message))
+    }
+  }
+
+  state.restoreSubscriptions('clientId', mockSocket)
+
+  const recoveryQuery = mockSocket.messages[1].payload?.query
+  assert.ok(recoveryQuery, 'Recovery query should be sent')
+
+  assert.ok(recoveryQuery.includes('margin_details'), 'Recovery query should keep the nested field from the fragment')
+
+  const errors = validate(schema, parse(recoveryQuery))
+  assert.deepEqual(errors, [], 'Recovery query should validate against the schema')
+})
+
+test('should build a valid recovery query with injected key on nested payloads', () => {
+  const schema = buildSchema(`
+    type RiskSimulationMargin {
+      total_margin: Float
+      currency: String
+    }
+
+    type RiskSimulation {
+      id: ID
+      cursor: String
+      margin_details: RiskSimulationMargin
+    }
+
+    type Query {
+      _: Boolean
+    }
+
+    type Subscription {
+      onRiskSimulationsFeed(cursor: String): RiskSimulation
+    }
+  `)
+
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onRiskSimulationsFeed',
+        key: 'cursor'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  // The key field (cursor) is missing from the selection set and must be injected
+  const query = 'subscription { onRiskSimulationsFeed { id margin_details { total_margin currency } } }'
+  state.addSubscription('clientId', query)
+
+  state.updateSubscriptionState('clientId', {
+    onRiskSimulationsFeed: {
+      id: 'rs1',
+      cursor: 'c2',
+      margin_details: { total_margin: 10.5, currency: 'EUR' }
+    }
+  })
+
+  const mockSocket = {
+    messages: [] as Array<{
+      type: string;
+      id?: string;
+      payload?: {
+        query: string;
+      };
+    }>,
+    send (message: string) {
+      this.messages.push(JSON.parse(message))
+    }
+  }
+
+  state.restoreSubscriptions('clientId', mockSocket)
+
+  const recoveryQuery = mockSocket.messages[1].payload?.query
+  assert.ok(recoveryQuery, 'Recovery query should be sent')
+
+  assert.ok(recoveryQuery.includes('cursor: "c2"'), 'Recovery query should include the last cursor value')
+  assert.ok(recoveryQuery.includes('margin_details'), 'Recovery query should keep the nested field')
+
+  const errors = validate(schema, parse(recoveryQuery))
+  assert.deepEqual(errors, [], 'Recovery query should validate against the schema')
+})
+
+test('should inject the key field when the subscription has no selection set', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('clientId', 'subscription { onItems }')
+
+  const client = state.clients.get('clientId')
+  const subscription = client?.subscriptions.get('onItems')
+
+  assert.ok(subscription?.injectedKey, 'Subscription should be flagged as having injected key')
+  assert.equal(subscription?.query, '{\n  offset\n}', 'Key field should be injected into an empty selection set')
+
+  state.updateSubscriptionState('clientId', {
+    onItems: {
+      offset: 42
+    }
+  })
+
+  const mockSocket = {
+    messages: [] as Array<{
+      type: string;
+      id?: string;
+      payload?: {
+        query: string;
+      };
+    }>,
+    send (message: string) {
+      this.messages.push(JSON.parse(message))
+    }
+  }
+
+  state.restoreSubscriptions('clientId', mockSocket)
+
+  const recoveryQuery = mockSocket.messages[1].payload?.query
+  assert.equal(recoveryQuery, 'subscription { onItems(offset: 42) {\n  offset\n} }')
+})
+
+test('should build a recovery query without selection set when the stored query is missing', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('clientId', 'subscription { onItems { id, offset } }')
+
+  const client = state.clients.get('clientId')
+  const subscription = client?.subscriptions.get('onItems')
+
+  if (subscription) {
+    subscription.query = undefined
+  }
+
+  state.updateSubscriptionState('clientId', {
+    onItems: {
+      id: 'item123',
+      offset: 42
+    }
+  })
+
+  const mockSocket = {
+    messages: [] as Array<{
+      type: string;
+      id?: string;
+      payload?: {
+        query: string;
+      };
+    }>,
+    send (message: string) {
+      this.messages.push(JSON.parse(message))
+    }
+  }
+
+  state.restoreSubscriptions('clientId', mockSocket)
+
+  const recoveryQuery = mockSocket.messages[1].payload?.query
+  assert.equal(recoveryQuery, 'subscription { onItems(offset: 42) }')
 })

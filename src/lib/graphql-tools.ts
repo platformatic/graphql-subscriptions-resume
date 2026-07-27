@@ -1,11 +1,12 @@
-import { parse } from 'graphql'
-import type { OperationDefinitionNode, FieldNode, FragmentDefinitionNode, SelectionSetNode } from 'graphql'
+import { parse, print, Kind } from 'graphql'
+import type { OperationDefinitionNode, FieldNode, FragmentDefinitionNode, SelectionNode, SelectionSetNode } from 'graphql'
 
 export type SubscriptionInfo = {
   name: string
   fields: string[]
   alias?: string
   params?: Record<string, any>
+  query?: string
 }
 
 export function extractSubscriptionQueryInfo (query: string, variables?: Record<string, any>): SubscriptionInfo | undefined {
@@ -46,11 +47,17 @@ export function extractSubscriptionQueryInfo (query: string, variables?: Record<
     // Extract fields from the subscription
     const fields = extractFields(subscriptionField.selectionSet, fragmentDefinitions)
 
+    // Keep the selection set structure (with fragments inlined) so the
+    // recovery query can be re-printed without flattening nested fields
+    const resolvedSelectionSet = resolveSelectionSet(subscriptionField.selectionSet, fragmentDefinitions)
+    const printedQuery = resolvedSelectionSet ? print(resolvedSelectionSet) : undefined
+
     const result = {
       name: subscriptionName,
       fields,
       alias,
       params,
+      query: printedQuery,
       variables
     }
 
@@ -150,6 +157,73 @@ function extractFields (
   }
 
   return fields
+}
+
+// Helper function to resolve a selection set into a self-contained one,
+// inlining fragment spreads while preserving the nesting structure
+function resolveSelectionSet (
+  selectionSet: SelectionSetNode | undefined,
+  fragmentDefinitions: FragmentDefinitionNode[]
+): SelectionSetNode | undefined {
+  if (!selectionSet) {
+    return undefined
+  }
+
+  const selections: SelectionNode[] = []
+
+  for (const selection of selectionSet.selections) {
+    if (selection.kind === 'Field') {
+      // Skip internal fields like __typename
+      if (selection.name.value === '__typename') {
+        continue
+      }
+
+      selections.push({
+        ...selection,
+        selectionSet: resolveSelectionSet(selection.selectionSet, fragmentDefinitions)
+      })
+    } else if (selection.kind === 'FragmentSpread') {
+      // Find the corresponding fragment definition
+      const fragmentName = selection.name.value
+      const fragmentDefinition = fragmentDefinitions.find(def => def.name.value === fragmentName)
+
+      if (fragmentDefinition) {
+        // Inline the fragment selections in place of the spread
+        const resolved = resolveSelectionSet(fragmentDefinition.selectionSet, fragmentDefinitions)
+        selections.push(...resolved!.selections)
+      }
+    } else if (selection.kind === 'InlineFragment') {
+      selections.push({
+        ...selection,
+        selectionSet: resolveSelectionSet(selection.selectionSet, fragmentDefinitions)!
+      })
+    }
+  }
+
+  return { ...selectionSet, selections }
+}
+
+/**
+ * Adds a field to a printed selection set
+ * @param query The printed selection set (as stored in SubscriptionInfo.query)
+ * @param field The name of the field to add
+ * @returns The printed selection set including the new field
+ */
+export function addFieldToQuery (query: string | undefined, field: string): string {
+  // Wrap the selection set in a synthetic operation so it can be parsed back
+  const document = parse(`subscription { __root ${query ?? ''} }`)
+  const operation = document.definitions[0] as OperationDefinitionNode
+  const rootField = operation.selectionSet.selections[0] as FieldNode
+
+  const selectionSet: SelectionSetNode = {
+    kind: Kind.SELECTION_SET,
+    selections: [
+      ...(rootField.selectionSet?.selections ?? []),
+      { kind: Kind.FIELD, name: { kind: Kind.NAME, value: field } }
+    ]
+  }
+
+  return print(selectionSet)
 }
 
 /**

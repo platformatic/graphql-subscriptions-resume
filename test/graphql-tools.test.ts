@@ -1,4 +1,4 @@
-import { extractSubscriptionQueryInfo, extractSubscriptionResultInfo } from '../src/lib/graphql-tools.ts'
+import { extractSubscriptionQueryInfo, extractSubscriptionResultInfo, addFieldToQuery } from '../src/lib/graphql-tools.ts'
 import assert from 'assert'
 import { test } from 'node:test'
 
@@ -408,4 +408,16 @@ test('should handle multiple fragment definitions and correctly extract from the
 
   assert.ok(!result.fields.includes('wrongField1'), 'Should not include fields from WrongFragment')
   assert.ok(!result.fields.includes('anotherWrongField'), 'Should not include fields from AnotherWrongFragment')
+})
+
+test('should add a field to a printed selection set', () => {
+  const result = addFieldToQuery('{\n  id\n}', 'offset')
+
+  assert.equal(result, '{\n  id\n  offset\n}')
+})
+
+test('should add a field to an undefined selection set', () => {
+  const result = addFieldToQuery(undefined, 'offset')
+
+  assert.equal(result, '{\n  offset\n}')
 })
