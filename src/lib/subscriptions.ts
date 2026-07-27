@@ -1,4 +1,4 @@
-import { extractSubscriptionQueryInfo, extractSubscriptionResultInfo, type SubscriptionInfo } from './graphql-tools.ts'
+import { extractSubscriptionQueryInfo, extractSubscriptionResultInfo, addFieldToQuery, type SubscriptionInfo } from './graphql-tools.ts'
 import { type Logger } from 'pino'
 // @ts-ignore
 import abstractLogger from 'abstract-logging'
@@ -24,6 +24,7 @@ type Subscription = {
   options: SubscriptionOptions
   name: string
   fields: string[]
+  query?: string
   params?: Record<string, any>
   lastValue: any
   alias?: string
@@ -54,7 +55,11 @@ function buildRecoveryQuery (subscription: Subscription): string {
     }
   }
 
-  return `subscription { ${aliasPrefix}${subscription.options.name}${args.length > 0 ? `(${args.join(', ')})` : ''} { ${subscription.fields.join(', ')} } }`
+  // The stored query is the printed selection set of the original subscription,
+  // so nested fields and inline fragments are preserved
+  const selectionSet = subscription.query ? ` ${subscription.query}` : ''
+
+  return `subscription { ${aliasPrefix}${subscription.options.name}${args.length > 0 ? `(${args.join(', ')})` : ''}${selectionSet} }`
 }
 
 export class StatefulSubscriptions {
@@ -134,11 +139,13 @@ export class StatefulSubscriptions {
     // Check if the key field is included in the subscription
     const keyIncluded = s.fields.includes(config.key)
     let injectedKey = false
+    let printedQuery = s.query
 
     // If key is missing, flag the subscription and inject the key field into the fields array
     if (!keyIncluded) {
       injectedKey = true
       s.fields.push(config.key)
+      printedQuery = addFieldToQuery(printedQuery, config.key)
       this.logger.debug({ subscription: s.name, key: config.key }, 'Injecting missing key field into subscription')
     }
 
@@ -151,6 +158,7 @@ export class StatefulSubscriptions {
       },
       name: s.name,
       fields: s.fields,
+      query: printedQuery,
       lastValue: (variables && 'lastValue' in variables)
         ? variables.lastValue
         : s.params?.[config.key] || null,
