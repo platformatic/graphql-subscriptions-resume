@@ -1926,3 +1926,93 @@ test('should build a valid recovery query with injected key on nested payloads',
   const errors = validate(schema, parse(recoveryQuery))
   assert.deepEqual(errors, [], 'Recovery query should validate against the schema')
 })
+
+test('should inject the key field when the subscription has no selection set', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('clientId', 'subscription { onItems }')
+
+  const client = state.clients.get('clientId')
+  const subscription = client?.subscriptions.get('onItems')
+
+  assert.ok(subscription?.injectedKey, 'Subscription should be flagged as having injected key')
+  assert.equal(subscription?.query, '{\n  offset\n}', 'Key field should be injected into an empty selection set')
+
+  state.updateSubscriptionState('clientId', {
+    onItems: {
+      offset: 42
+    }
+  })
+
+  const mockSocket = {
+    messages: [] as Array<{
+      type: string;
+      id?: string;
+      payload?: {
+        query: string;
+      };
+    }>,
+    send (message: string) {
+      this.messages.push(JSON.parse(message))
+    }
+  }
+
+  state.restoreSubscriptions('clientId', mockSocket)
+
+  const recoveryQuery = mockSocket.messages[1].payload?.query
+  assert.equal(recoveryQuery, 'subscription { onItems(offset: 42) {\n  offset\n} }')
+})
+
+test('should build a recovery query without selection set when the stored query is missing', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscription('clientId', 'subscription { onItems { id, offset } }')
+
+  const client = state.clients.get('clientId')
+  const subscription = client?.subscriptions.get('onItems')
+
+  if (subscription) {
+    subscription.query = undefined
+  }
+
+  state.updateSubscriptionState('clientId', {
+    onItems: {
+      id: 'item123',
+      offset: 42
+    }
+  })
+
+  const mockSocket = {
+    messages: [] as Array<{
+      type: string;
+      id?: string;
+      payload?: {
+        query: string;
+      };
+    }>,
+    send (message: string) {
+      this.messages.push(JSON.parse(message))
+    }
+  }
+
+  state.restoreSubscriptions('clientId', mockSocket)
+
+  const recoveryQuery = mockSocket.messages[1].payload?.query
+  assert.equal(recoveryQuery, 'subscription { onItems(offset: 42) }')
+})
