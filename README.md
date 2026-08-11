@@ -296,7 +296,9 @@ Removes the subscription for a specific client by subscription id.
 removeAllSubscriptions(clientId: string): void
 ```
 
-Removes all subscriptions for a specific client.
+Removes all state for a specific client, including its subscriptions and the
+`connection_init` payload. Use this when a client disconnects: the state is
+re-created lazily if the client sends new subscriptions afterwards.
 
 **Parameters:**
 - `clientId`: The client's unique identifier

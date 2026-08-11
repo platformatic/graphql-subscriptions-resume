@@ -268,10 +268,11 @@ export class StatefulSubscriptions {
   }
 
   removeAllSubscriptions (clientId: string) {
-    const client = this.clients.get(clientId)
-    if (!client) return
-
-    client.subscriptions.clear()
-    client.ids.clear()
+    // Delete the whole client entry, not just the inner maps: the entry
+    // also retains the connection_init payload, so keeping it around after
+    // a disconnect leaks both memory and credentials.
+    // State is re-created lazily by addSubscription/addSubscriptionInit if
+    // the client comes back.
+    this.clients.delete(clientId)
   }
 }
