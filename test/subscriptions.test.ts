@@ -540,8 +540,7 @@ test('should remove all subscriptions for a client', () => {
 
   state.removeAllSubscriptions('clientId')
 
-  const clientAfter = state.clients.get('clientId')
-  assert.equal(clientAfter?.subscriptions.size, 0)
+  assert.equal(state.clients.has('clientId'), false)
 })
 
 test('should handle removing subscriptions for non-existent client', () => {
@@ -580,8 +579,27 @@ test('should remove all subscriptions for a client with multiple subscriptions',
 
   state.removeAllSubscriptions('clientId')
 
-  const clientAfter = state.clients.get('clientId')
-  assert.equal(clientAfter?.subscriptions.size, 0)
+  assert.equal(state.clients.has('clientId'), false)
+})
+
+test('should drop the connection_init payload when removing all subscriptions', () => {
+  const state = new StatefulSubscriptions({
+    subscriptions: [
+      {
+        name: 'onItems',
+        key: 'offset'
+      }
+    ],
+    logger: createMockLogger()
+  })
+
+  state.addSubscriptionInit('clientId', { authorization: 'Bearer secret-token' })
+  state.addSubscription('clientId', 'subscription { onItems { id, offset, data } }')
+
+  state.removeAllSubscriptions('clientId')
+
+  assert.equal(state.clients.has('clientId'), false)
+  assert.equal(state.clients.size, 0)
 })
 
 test('should extract lastValue from variables', () => {
@@ -1425,8 +1443,7 @@ test('should work without logger for all methods', () => {
 
   state.removeAllSubscriptions('client1')
 
-  const clientAfterRemoval = state.clients.get('client1')
-  assert.equal(clientAfterRemoval?.subscriptions.size, 0, 'removeAllSubscriptions should work without logger')
+  assert.equal(state.clients.has('client1'), false, 'removeAllSubscriptions should work without logger')
 
   state.removeAllSubscriptions('nonExistentClient')
 
